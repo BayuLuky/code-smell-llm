@@ -1,0 +1,127 @@
+def compute(
+    cls,
+    X,
+    Y,
+    radius,
+    metric="euclidean",
+    chunk_size=None,
+    metric_kwargs=None,
+    strategy=None,
+    return_distance=False,
+    sort_results=False,
+):
+    """Return the results of the reduction for the given arguments.
+
+    Parameters
+    ----------
+    X : ndarray or CSR matrix of shape (n_samples_X, n_features)
+        Input data.
+
+    Y : ndarray or CSR matrix of shape (n_samples_Y, n_features)
+        Input data.
+
+    radius : float
+        The radius defining the neighborhood.
+
+    metric : str, default='euclidean'
+        The distance metric to use.
+        For a list of available metrics, see the documentation of
+        :class:`~sklearn.metrics.DistanceMetric`.
+
+    chunk_size : int, default=None,
+        The number of vectors per chunk. If None (default) looks-up in
+        scikit-learn configuration for `pairwise_dist_chunk_size`,
+        and use 256 if it is not set.
+
+    metric_kwargs : dict, default=None
+        Keyword arguments to pass to specified metric function.
+
+    strategy : str, {'auto', 'parallel_on_X', 'parallel_on_Y'}, default=None
+        The chunking strategy defining which dataset parallelization are made on.
+
+        For both strategies the computations happens with two nested loops,
+        respectively on chunks of X and chunks of Y.
+        Strategies differs on which loop (outer or inner) is made to run
+        in parallel with the Cython `prange` construct:
+
+          - 'parallel_on_X' dispatches chunks of X uniformly on threads.
+            Each thread then iterates on all the chunks of Y. This strategy is
+            embarrassingly parallel and comes with no datastructures
+            synchronisation.
+
+          - 'parallel_on_Y' dispatches chunks of Y uniformly on threads.
+            Each thread processes all the chunks of X in turn. This strategy is
+            a sequence of embarrassingly parallel subtasks (the inner loop on Y
+            chunks) with intermediate datastructures synchronisation at each
+            iteration of the sequential outer loop on X chunks.
+
+          - 'auto' relies on a simple heuristic to choose between
+            'parallel_on_X' and 'parallel_on_Y': when `X.shape[0]` is large enough,
+            'parallel_on_X' is usually the most efficient strategy.
+            When `X.shape[0]` is small but `Y.shape[0]` is large, 'parallel_on_Y'
+            brings more opportunity for parallelism and is therefore more efficient
+            despite the synchronization step at each iteration of the outer loop
+            on chunks of `X`.
+
+          - None (default) looks-up in scikit-learn configuration for
+            `pairwise_dist_parallel_strategy`, and use 'auto' if it is not set.
+
+    return_distance : boolean, default=False
+        Return distances between each X vector and its neighbors if set to True.
+
+    sort_results : boolean, default=False
+        Sort results with respect to distances between each X vector and its
+        neighbors if set to True.
+
+    Returns
+    -------
+    If return_distance=False:
+      - neighbors_indices : ndarray of n_samples_X ndarray
+        Indices of the neighbors for each vector in X.
+
+    If return_distance=True:
+      - neighbors_indices : ndarray of n_samples_X ndarray
+        Indices of the neighbors for each vector in X.
+      - neighbors_distances : ndarray of n_samples_X ndarray
+        Distances to the neighbors for each vector in X.
+
+    Notes
+    -----
+    This classmethod inspects the arguments values to dispatch to the
+    dtype-specialized implementation of :class:`RadiusNeighbors`.
+
+    This allows decoupling the API entirely from the implementation details
+    whilst maintaining RAII: all temporarily allocated datastructures necessary
+    for the concrete implementation are therefore freed when this classmethod
+    returns.
+    """
+    if X.dtype == Y.dtype == np.float64:
+        return RadiusNeighbors64.compute(
+            X=X,
+            Y=Y,
+            radius=radius,
+            metric=metric,
+            chunk_size=chunk_size,
+            metric_kwargs=metric_kwargs,
+            strategy=strategy,
+            sort_results=sort_results,
+            return_distance=return_distance,
+        )
+
+    if X.dtype == Y.dtype == np.float32:
+        return RadiusNeighbors32.compute(
+            X=X,
+            Y=Y,
+            radius=radius,
+            metric=metric,
+            chunk_size=chunk_size,
+            metric_kwargs=metric_kwargs,
+            strategy=strategy,
+            sort_results=sort_results,
+            return_distance=return_distance,
+        )
+
+    raise ValueError(
+        "Only float64 or float32 datasets pairs are supported at this time, "
+        f"got: X.dtype={X.dtype} and Y.dtype={Y.dtype}."
+    )

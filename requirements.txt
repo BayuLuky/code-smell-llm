@@ -1,0 +1,33 @@
+# =====================================================================
+# requirements.txt  —  DAFTAR LIBRARY (untuk komputer LOKAL Anda)
+# ---------------------------------------------------------------------
+# File ini dipakai untuk tahap PERSIAPAN DATA dan EVALUASI yang berjalan
+# di komputer Anda sendiri (TIDAK butuh GPU).
+#
+# Cara pasang (jalankan di terminal, di dalam folder proyek):
+#     pip install -r requirements.txt
+#
+# Versi dikunci persis seperti Lampiran A proposal Anda, supaya hasil
+# bisa direproduksi. Tanda "==" artinya "pakai versi ini, jangan yang lain".
+#
+# CATATAN: library berat untuk MODEL (torch, transformers, bitsandbytes,
+# peft) TIDAK ada di sini, karena itu dipasang di Google Colab langsung
+# pada notebook (Tahap 3-4). Lokal Anda tidak perlu repot.
+# =====================================================================
+
+# --- Pengolahan data & angka ---
+pandas==2.1.4          # tabel data (baca CSV, gabung, pivot)
+numpy==1.26.2          # operasi array & statistik dasar
+
+# --- Metrik & statistik (inti Bab IV) ---
+scikit-learn==1.3.2    # precision, recall, f1, confusion_matrix, MCC
+scipy==1.11.4          # bootstrap resampling untuk selang kepercayaan
+statsmodels==0.14.1    # uji Cochran's Q & McNemar + koreksi Bonferroni
+
+# --- Visualisasi (8 grafik Lampiran C) ---
+matplotlib==3.8.2      # grafik dasar: bar chart, box plot, ROC
+seaborn==0.13.0        # heatmap & confusion matrix yang rapi
+matplotlib-venn==0.11.10  # Venn diagram untuk analisis overlap
+
+# --- Pengambilan data dari internet ---
+requests==2.31.0       # mengunduh berkas dari GitHub & Zenodo
