@@ -1,0 +1,21 @@
+def _clean_req(self, request, method, results):
+    """stop the request from returning objects and records any errors"""
+
+    cb = request.callback
+
+    @wraps(cb)
+    def cb_wrapper(response, **cb_kwargs):
+        try:
+            output = cb(response, **cb_kwargs)
+            output = list(iterate_spider_output(output))
+        except Exception:
+            case = _create_testcase(method, "callback")
+            results.addError(case, sys.exc_info())
+
+    def eb_wrapper(failure):
+        case = _create_testcase(method, "errback")
+        exc_info = failure.type, failure.value, failure.getTracebackObject()
+        results.addError(case, exc_info)
+
+    request.callback = cb_wrapper
+    request.errback = eb_wrapper

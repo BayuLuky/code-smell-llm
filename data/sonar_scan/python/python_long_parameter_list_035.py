@@ -1,0 +1,27 @@
+def __init__(
+    self,
+    alpha=1.0,
+    *,
+    fit_intercept=True,
+    precompute=False,
+    copy_X=True,
+    max_iter=1000,
+    tol=1e-4,
+    warm_start=False,
+    positive=False,
+    random_state=None,
+    selection="cyclic",
+):
+    super().__init__(
+        alpha=alpha,
+        l1_ratio=1.0,
+        fit_intercept=fit_intercept,
+        precompute=precompute,
+        copy_X=copy_X,
+        max_iter=max_iter,
+        tol=tol,
+        warm_start=warm_start,
+        positive=positive,
+        random_state=random_state,
+        selection=selection,
+    )

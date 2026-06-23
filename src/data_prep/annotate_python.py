@@ -5,7 +5,7 @@
 # satu per satu, urut dari skor tertinggi, lalu Anda memberi keputusan:
 #   [y] ya, ini smell-nya     [n] bukan
 #   [s] lewati                [o] buka cuplikan di editor
-#   [u] batalkan keputusan terakhir
+#   [u] batalkan & tampilkan ulang keputusan terakhir
 #   [q] simpan & keluar
 #
 # Keputusan disimpan per-penilai ke data/labels/annotations_<nama>.csv
@@ -78,70 +78,94 @@ def main():
     decisions = load_decisions(nama)
     decided = {d["sample_id"] for d in decisions}
     counts = confirmed_counts(decisions)
-    session = []   # urutan sample_id yg diputuskan di sesi ini (untuk undo)
+    session = []   # tumpukan (indeks, sample_id) yg diputuskan di sesi ini
 
     print(f"\nMemuat {len(decisions)} keputusan sebelumnya.")
-    print(f"Terkonfirmasi sejauh ini: {counts}\n")
+    print(f"Terkonfirmasi sejauh ini: {counts}")
 
-    for label in CLASSES:
-        sub = df[df["proposed_label"] == label].sort_values("score", ascending=False)
+    # Pilih kelas yang ingin dikerjakan (tak perlu urut god->data->feature).
+    print("\nKelas mana yang ingin dianotasi?")
+    for idx, c in enumerate(CLASSES, 1):
+        print(f"  [{idx}] {c}  ({counts[c]}/{TARGET})")
+    print(f"  [{len(CLASSES) + 1}] semua")
+    pilih = input("Pilihan > ").strip()
+    if pilih.isdigit() and 1 <= int(pilih) <= len(CLASSES):
+        selected = [CLASSES[int(pilih) - 1]]
+    else:
+        selected = list(CLASSES)
+    print(f"Mengerjakan: {', '.join(selected)}\n")
+
+    # Susun daftar kerja: hanya kelas terpilih, URUT berdasarkan id
+    # (000, 001, 002, ...) — id sudah tersusun dari skor tertinggi, jadi
+    # urutannya rapi dan tidak meloncat.
+    worklist = []
+    for label in selected:
+        sub = df[df["proposed_label"] == label].sort_values("sample_id")
         for _, row in sub.iterrows():
-            if counts[label] >= TARGET:
-                break
-            if row["sample_id"] in decided:
-                continue
+            worklist.append(row)
 
-            while True:
-                print("\n" + "=" * 64)
-                print(f"[{label}]  terkonfirmasi {counts[label]}/{TARGET}")
-                print(f"  id     : {row['sample_id']}")
-                print(f"  sumber : {row['source_file']}  (unit: {row['unit_name']})")
-                print(f"  metrik : {row['metrics']}   skor {row['score']}")
-                print("-" * 64)
-                snip = CAND_DIR / label / f"{row['sample_id']}.py"
-                preview(snip)
-                print("-" * 64)
-                jwb = input("  [y]a [n]o [s]kip [o]pen [u]ndo [q]uit > ").strip().lower()
+    i = 0
+    while i < len(worklist):
+        row = worklist[i]
+        label = row["proposed_label"]
 
-                if jwb == "o":
-                    try:
-                        os.startfile(str(snip))   # Windows: buka di app default
-                    except Exception as e:
-                        print(f"  (tak bisa membuka: {e})")
-                    continue
+        # Lewati yang sudah diputuskan, atau kelas yang sudah penuh (42).
+        if row["sample_id"] in decided or counts[label] >= TARGET:
+            i += 1
+            continue
 
-                if jwb == "u":
-                    if session:
-                        last = session.pop()
-                        decisions = [d for d in decisions if d["sample_id"] != last]
-                        decided.discard(last)
-                        counts = confirmed_counts(decisions)
-                        save_decisions(nama, decisions)
-                        print(f"  (dibatalkan: {last} — akan muncul lagi di sesi berikutnya)")
-                    else:
-                        print("  (belum ada keputusan di sesi ini untuk dibatalkan)")
-                    continue
+        print("\n" + "=" * 64)
+        print(f"[{label}]  terkonfirmasi {counts[label]}/{TARGET}")
+        print(f"  id     : {row['sample_id']}")
+        print(f"  sumber : {row['source_file']}  (unit: {row['unit_name']})")
+        print(f"  metrik : {row['metrics']}   skor {row['score']}")
+        print("-" * 64)
+        snip = CAND_DIR / label / f"{row['sample_id']}.py"
+        preview(snip)
+        print("-" * 64)
+        jwb = input("  [y]a [n]o [s]kip [o]pen [u]ndo [q]uit > ").strip().lower()
 
-                if jwb == "q":
-                    save_decisions(nama, decisions)
-                    print(f"\nTersimpan ke {ann_path(nama)}. Terkonfirmasi: {confirmed_counts(decisions)}")
-                    return
+        if jwb == "o":
+            try:
+                os.startfile(str(snip))   # Windows: buka di app default
+            except Exception as e:
+                print(f"  (tak bisa membuka: {e})")
+            continue   # tampilkan ulang kandidat yang sama
 
-                if jwb in ("y", "n", "s"):
-                    final = label if jwb == "y" else ("tidak" if jwb == "n" else "skip")
-                    decisions.append({
-                        "sample_id": row["sample_id"], "proposed_label": label,
-                        "final_label": final, "source_file": row["source_file"],
-                        "unit_name": row["unit_name"], "start_line": row["start_line"],
-                        "end_line": row["end_line"], "annotator": nama})
-                    decided.add(row["sample_id"])
-                    session.append(row["sample_id"])
-                    if final == label:
-                        counts[label] += 1
-                    save_decisions(nama, decisions)
-                    break
+        if jwb == "u":
+            if session:
+                j, sid = session.pop()
+                decisions = [d for d in decisions if d["sample_id"] != sid]
+                decided.discard(sid)
+                counts = confirmed_counts(decisions)
+                save_decisions(nama, decisions)
+                print(f"  (dibatalkan: {sid} — ditampilkan ulang sekarang)")
+                i = j     # kembali ke kandidat itu untuk dinilai ulang
+            else:
+                print("  (belum ada keputusan di sesi ini untuk dibatalkan)")
+            continue
 
-                print("  (input tidak dikenal — ketik y, n, s, o, u, atau q)")
+        if jwb == "q":
+            save_decisions(nama, decisions)
+            print(f"\nTersimpan ke {ann_path(nama)}. Terkonfirmasi: {confirmed_counts(decisions)}")
+            return
+
+        if jwb in ("y", "n", "s"):
+            final = label if jwb == "y" else ("tidak" if jwb == "n" else "skip")
+            decisions.append({
+                "sample_id": row["sample_id"], "proposed_label": label,
+                "final_label": final, "source_file": row["source_file"],
+                "unit_name": row["unit_name"], "start_line": row["start_line"],
+                "end_line": row["end_line"], "annotator": nama})
+            decided.add(row["sample_id"])
+            session.append((i, row["sample_id"]))
+            if final == label:
+                counts[label] += 1
+            save_decisions(nama, decisions)
+            i += 1
+            continue
+
+        print("  (input tidak dikenal — ketik y, n, s, o, u, atau q)")
 
     print(f"\nSelesai meninjau semua kandidat. Terkonfirmasi akhir: {confirmed_counts(decisions)}")
     save_decisions(nama, decisions)
